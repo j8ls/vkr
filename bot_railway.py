@@ -8,6 +8,8 @@ app = Flask(__name__)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 ADMIN_ID = os.environ.get('ADMIN_ID')
 
+print(f"Бот запущен! BOT_TOKEN: {BOT_TOKEN[:10]}... ADMIN_ID: {ADMIN_ID}")
+
 def send_message(chat_id, text):
     """Отправка сообщения пользователю"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -16,7 +18,9 @@ def send_message(chat_id, text):
         "text": text,
         "parse_mode": "HTML"
     }
-    requests.post(url, json=data)
+    response = requests.post(url, json=data)
+    print(f"Отправлено сообщение в чат {chat_id}: {response.status_code}")
+    return response
 
 def notify_admin(user_info, message_text):
     """Уведомление админа о новом сообщении"""
@@ -35,6 +39,7 @@ def notify_admin(user_info, message_text):
 💬 Сообщение:
 {message_text}
     """
+    print(f"Отправляю уведомление админу {ADMIN_ID}")
     send_message(ADMIN_ID, admin_text)
 
 @app.route('/', methods=['GET'])
@@ -44,19 +49,26 @@ def index():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Обработка входящих сообщений через webhook"""
-    update = request.get_json()
-    
-    if 'message' not in update:
-        return 'ok'
-    
-    message = update['message']
-    chat_id = message['chat']['id']
-    user = message['from']
-    text = message.get('text', '')
-    
-    # Ответ на команду /start
-    if text == '/start':
-        welcome_text = """
+    try:
+        update = request.get_json()
+        print(f"=== Получен webhook update ===")
+        print(f"Update: {update}")
+        
+        if 'message' not in update:
+            print("⚠️ В update нет message")
+            return 'ok'
+        
+        message = update['message']
+        chat_id = message['chat']['id']
+        user = message['from']
+        text = message.get('text', '')
+        
+        print(f"📩 Получено сообщение: '{text}' от пользователя {chat_id}")
+        
+        # Ответ на команду /start
+        if text == '/start':
+            print("✅ Обрабатываю команду /start")
+            welcome_text = """
 🔒 <b>Извините!</b>
 
 К сожалению, данное исследование уже закрыто.
@@ -65,18 +77,26 @@ def webhook():
 Я обязательно их рассмотрю ❤️
 
 Просто напишите ваше сообщение здесь!
-        """
-        send_message(chat_id, welcome_text)
-    
-    # Пересылка всех сообщений админу (кроме /start)
-    elif text:
-        notify_admin(user, text)
+            """
+            send_message(chat_id, welcome_text)
         
-        # Подтверждение пользователю
-        confirmation = "✅ Спасибо! Ваше сообщение получено и передано администратору."
-        send_message(chat_id, confirmation)
-    
-    return 'ok'
+        # Пересылка всех сообщений админу (кроме /start)
+        elif text:
+            print(f"📨 Пересылаю сообщение админу")
+            notify_admin(user, text)
+            
+            # Подтверждение пользователю
+            confirmation = "✅ Спасибо! Ваше сообщение получено и передано администратору."
+            send_message(chat_id, confirmation)
+        
+        print("=== Обработка завершена ===")
+        return 'ok'
+        
+    except Exception as e:
+        print(f"❌ ОШИБКА в webhook: {e}")
+        import traceback
+        traceback.print_exc()
+        return 'error', 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
