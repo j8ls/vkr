@@ -1,9 +1,12 @@
 import os
+from flask import Flask, request
 import requests
 from datetime import datetime
 
+app = Flask(__name__)
+
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-ADMIN_ID = os.environ.get('ADMIN_ID')  # Ваш Telegram ID
+ADMIN_ID = os.environ.get('ADMIN_ID')
 
 def send_message(chat_id, text):
     """Отправка сообщения пользователю"""
@@ -34,50 +37,47 @@ def notify_admin(user_info, message_text):
     """
     send_message(ADMIN_ID, admin_text)
 
-def get_updates(offset=None):
-    """Получение обновлений от Telegram"""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-    params = {"offset": offset, "timeout": 30}
-    response = requests.get(url, params=params)
-    return response.json()
+@app.route('/', methods=['GET'])
+def index():
+    return "Telegram Bot is running! ✅"
 
-def process_updates():
-    """Обработка всех новых сообщений"""
-    updates = get_updates()
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    """Обработка входящих сообщений через webhook"""
+    update = request.get_json()
     
-    if not updates.get('result'):
-        return
+    if 'message' not in update:
+        return 'ok'
     
-    for update in updates['result']:
-        if 'message' not in update:
-            continue
-            
-        message = update['message']
-        chat_id = message['chat']['id']
-        user = message['from']
-        text = message.get('text', '')
-        
-        # Ответ на команду /start
-        if text == '/start':
-            welcome_text = """
+    message = update['message']
+    chat_id = message['chat']['id']
+    user = message['from']
+    text = message.get('text', '')
+    
+    # Ответ на команду /start
+    if text == '/start':
+        welcome_text = """
 🔒 <b>Извините!</b>
 
 К сожалению, данное исследование уже закрыто.
 
 Но вы можете написать свои пожелания и предложения по темам для будущих постов! 
-Мы обязательно их рассмотрим. 💡
+Я обязательно их рассмотрю ❤️
 
-Просто напишите ваше сообщение, и мы его получим!
-            """
-            send_message(chat_id, welcome_text)
+Просто напишите ваше сообщение здесь!
+        """
+        send_message(chat_id, welcome_text)
+    
+    # Пересылка всех сообщений админу (кроме /start)
+    elif text:
+        notify_admin(user, text)
         
-        # Пересылка всех сообщений админу (кроме /start)
-        elif text:
-            notify_admin(user, text)
-            
-            # Подтверждение пользователю
-            confirmation = "✅ Спасибо! Ваше сообщение получено и передано администратору."
-            send_message(chat_id, confirmation)
+        # Подтверждение пользователю
+        confirmation = "✅ Спасибо! Ваше сообщение получено и передано администратору."
+        send_message(chat_id, confirmation)
+    
+    return 'ok'
 
-if __name__ == "__main__":
-    process_updates()
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
