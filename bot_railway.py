@@ -41,7 +41,7 @@ def notify_admin(user_info, message_text):
 def index():
     return "Telegram Bot is running! ✅"
 
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     """Обработка входящих сообщений через webhook"""
     update = request.get_json()
