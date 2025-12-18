@@ -3,49 +3,53 @@ import { Telegraf } from "telegraf";
 const token = process.env.BOT_TOKEN;
 if (!token) throw new Error("BOT_TOKEN is not set");
 
-const adminChatId = process.env.ADMIN_CHAT_ID; // ваш chat id в Telegram
-if (!adminChatId) console.warn("ADMIN_CHAT_ID is not set");
+const adminIdRaw = process.env.ADMIN_CHAT_ID;
+if (!adminIdRaw) throw new Error("ADMIN_CHAT_ID is not set");
+const ADMIN_CHAT_ID = Number(adminIdRaw);
 
 const bot = new Telegraf(token);
 
-const replyText =
-  'К сожалению, данное исследование уже закрыто.\n\n' +
-  'Но вы можете написать свои пожелания и предложения по темам для будущих постов прямо здесь! Я обязательно их рассмотрю! ❤️';
+const helloText =
+  "К сожалению, данное исследование уже закрыто.\n" +
+  "Но вы можете написать свои пожелания и предложения по темам для будущих постов!\n" +
+  "Я обязательно их рассмотрю! Просто напишите ваше сообщение здесь!";
+
+const thanksText = "Спасибо за предложение! Сообщение направленно админу";
+
+function formatUser(ctx: any) {
+  const from = ctx.from;
+  const fullName = [from?.first_name, from?.last_name].filter(Boolean).join(" ").trim();
+  const username = from?.username ? `@${from.username}` : "(без username)"; // username может отсутствовать [web:25]
+  const id = from?.id;
+
+  return [
+    "Новое сообщение в бот:",
+    `Имя: ${fullName || "(без имени)"}`,
+    `Username: ${username}`,
+    `User ID: ${id}`,
+  ].join("\n");
+}
 
 bot.start(async (ctx) => {
-  // Ответ пользователю
-  await ctx.reply(replyText);
-
-  // Уведомление вам (опционально)
-  if (adminChatId) {
-    await ctx.telegram.sendMessage(
-      adminChatId,
-      `Новый /start от пользователя: ${ctx.from?.first_name ?? ""} @${ctx.from?.username ?? "(no username)"} (id ${ctx.from?.id})`
-    );
-  }
+  await ctx.reply(helloText);
 });
 
 bot.on("message", async (ctx) => {
-  // 1) Забираем, что прислали
-  const from = ctx.from;
-  const text = ctx.message?.text;
-  const caption = ctx.message?.caption;
+  if (!ctx.chat || ctx.chat.type !== "private") return;
+  if (ctx.from?.id === ADMIN_CHAT_ID) return;
 
-  const body =
-    text ? text :
-    caption ? `[media] ${caption}` :
-    `[не текст] type: ${ctx.updateType}`;
+  // 1) сначала “шапка” с данными пользователя (имя/username/id) [web:25]
+  await ctx.telegram.sendMessage(ADMIN_CHAT_ID, formatUser(ctx));
 
-  // 2) Пересылаем вам текстом
-  if (adminChatId) {
-    await ctx.telegram.sendMessage(
-      adminChatId,
-      `Пожелание/сообщение:\n${body}\n\nОт: ${from?.first_name ?? ""} ${from?.last_name ?? ""}\nUsername: ${from?.username ? "@" + from.username : "(нет)"}\nid: ${from?.id}`
-    );
-  }
+  // 2) затем форвард исходного сообщения (любой тип: текст/фото/файл) [web:1]
+  await ctx.telegram.forwardMessage(
+    ADMIN_CHAT_ID,
+    ctx.chat.id,
+    ctx.message.message_id
+  );
 
-  // 3) Отвечаем пользователю вашим шаблоном
-  await ctx.reply(replyText);
+  // 3) ответ пользователю
+  await ctx.reply(thanksText);
 });
 
 bot.launch();
